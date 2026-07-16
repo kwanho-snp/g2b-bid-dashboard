@@ -114,6 +114,27 @@ def extract_any(path):
         print(f"    추출 실패({ext}): {e}")
     return ""
 
+# ===== 파일 다운로드 (헤더 + 재시도) =====
+def download_file(url, save_path, tries=3):
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                      "AppleWebKit/537.36 (KHTML, like Gecko) "
+                      "Chrome/124.0 Safari/537.36",
+        "Referer": "https://www.g2b.go.kr/",
+    }
+    for attempt in range(1, tries + 1):
+        try:
+            r = requests.get(url, headers=headers, timeout=20)
+            if r.status_code == 200 and len(r.content) > 0:
+                with open(save_path, "wb") as fp:
+                    fp.write(r.content)
+                return True
+            print(f"    시도{attempt}: 상태 {r.status_code}, 크기 {len(r.content)}")
+        except Exception as e:
+            print(f"    시도{attempt} 실패: {type(e).__name__}")
+        time.sleep(2)
+    return False
+
 # ===== AI 판단 =====
 def analyze_notice(combined_text):
     prompt = f"""당신은 입찰공고 검토 전문가입니다. 아래 회사가 이 공고에 제안서를 낼 만한지 판단하세요.
@@ -171,7 +192,7 @@ def classify(name):
 def main():
     URL = "https://apis.data.go.kr/1230000/ad/BidPublicInfoService/getBidPblancListInfoServc"
     end = datetime.now()
-    start = end - timedelta(days=2)   # 최근 2일
+    start = end - timedelta(days=2)
 
     base = {
         "serviceKey": G2B_API_KEY, "inqryDiv": 1, "numOfRows": 100, "type": "json",
@@ -179,7 +200,6 @@ def main():
         "inqryEndDt": end.strftime("%Y%m%d") + "2359",
     }
 
-    # 1) 전체 페이지 수집
     all_items, page = [], 1
     while True:
         r = requests.get(URL, params={**base, "pageNo": page}, timeout=30)
@@ -194,7 +214,6 @@ def main():
         time.sleep(0.3)
     print(f"최근 2일 용역 공고 {len(all_items)}건 수집")
 
-    # 2) 키워드 + 마감 필터
     now = datetime.now()
     def keep(it):
         title = (it.get("bidNtceNm") or "").replace(" ", "")
@@ -207,7 +226,6 @@ def main():
     matched = [it for it in all_items if keep(it)]
     print(f"키워드+마감 필터 통과 {len(matched)}건")
 
-    # 3) 신규 공고 저장 (upsert)
     for it in matched:
         supabase.table("notices").upsert({
             "bid_notice_no": it.get("bidNtceNo"),
@@ -222,10 +240,8 @@ def main():
             "source_url": it.get("bidNtceDtlUrl"),
         }, on_conflict="bid_notice_no,bid_notice_ord").execute()
 
-    # 4) 각 공고: 파일 다운로드→추출→AI 판단→저장 (아직 분석 안 된 것만)
     for it in matched:
         bid_no = it.get("bidNtceNo")
-        # 이미 분석된 공고는 건너뜀 (매일 중복 판단·비용 방지)
         exist = supabase.table("notices").select("analysis").eq("bid_notice_no", bid_no).execute()
         if exist.data and exist.data[0].get("analysis"):
             continue
@@ -237,12 +253,10 @@ def main():
                 ext = os.path.splitext(f["name"])[1].lower()
                 if ext not in (".hwp", ".hwpx", ".pdf"): continue
                 path = os.path.join(tmp, f["name"])
-                try:
-                    resp = requests.get(f["url"], timeout=60)
-                    with open(path, "wb") as fp: fp.write(resp.content)
+                if download_file(f["url"], path):
                     combined += extract_any(path) + "\n"
-                except Exception as e:
-                    print(f"  파일 실패 {f['name']}: {e}")
+                else:
+                    print(f"  파일 실패(재시도 소진) {f['name']}")
             if not combined.strip():
                 print(f"  [문서없음] {bid_no}")
                 continue
