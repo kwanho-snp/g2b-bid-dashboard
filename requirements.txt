@@ -1,2 +1,6 @@
 streamlit
 supabase
+anthropic
+requests
+olefile
+pdfplumber
