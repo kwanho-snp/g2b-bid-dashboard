@@ -1,0 +1,30 @@
+name: 매일 공고 수집·판단
+
+on:
+  schedule:
+    - cron: '25 9 * * *'
+      timezone: 'Asia/Seoul'
+  workflow_dispatch:   # 수동 실행 버튼 (테스트용)
+
+jobs:
+  run-pipeline:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 코드 가져오기
+        uses: actions/checkout@v4
+
+      - name: 파이썬 설치
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: 라이브러리 설치
+        run: pip install -r requirements.txt
+
+      - name: 파이프라인 실행
+        env:
+          G2B_API_KEY: ${{ secrets.G2B_API_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python pipeline.py
