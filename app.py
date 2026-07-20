@@ -91,23 +91,12 @@ if "id" in params:
 # ===== 리스트 화면 =====
 st.title("📋 입찰공고 검토 보드")
 
-total = len(notices)
-review = len([n for n in notices if n.get("status") != "부적합 제외"])
-recommend = len([n for n in notices if (n.get("analysis") or {}).get("recommendation") == "참여 권장"])
-st.markdown(f"### 전체 {total}건  ·  검토 대상 {review}건  ·  참여 권장 {recommend}건")
-
+# 1) 먼저 필터 UI
 f = st.radio("필터", ["전체", "검토 대상만", "부적합 제외", "참여 권장만"], horizontal=True)
 show_expired = st.checkbox("마감 지난 공고도 보기", value=False)
 
-rows = notices
-if f == "검토 대상만":
-    rows = [n for n in notices if n.get("status") != "부적합 제외"]
-elif f == "부적합 제외":
-    rows = [n for n in notices if n.get("status") == "부적합 제외"]
-elif f == "참여 권장만":
-    rows = [n for n in notices if (n.get("analysis") or {}).get("recommendation") == "참여 권장"]
-
-# 마감 지난 공고 숨기기 (체크박스 켜면 포함)
+# 2) 마감 지난 공고 숨기기 (요약·목록 모두 이 기준으로)
+base = notices
 if not show_expired:
     from datetime import date
     today = date.today()
@@ -116,12 +105,25 @@ if not show_expired:
         if not dl:
             return True
         try:
-            # 앞 10글자(YYYY-MM-DD)만 떼서 날짜로 비교
-            d = date.fromisoformat(str(dl)[:10])
-            return d >= today
+            return date.fromisoformat(str(dl)[:10]) >= today
         except Exception:
             return True
-    rows = [n for n in rows if not_expired(n)]
+    base = [n for n in notices if not_expired(n)]
+
+# 3) 요약 지표 (실제 보이는 base 기준 → 화면과 항상 일치)
+total = len(base)
+review = len([n for n in base if n.get("status") != "부적합 제외"])
+recommend = len([n for n in base if (n.get("analysis") or {}).get("recommendation") == "참여 권장"])
+st.markdown(f"### 전체 {total}건  ·  검토 대상 {review}건  ·  참여 권장 {recommend}건")
+
+# 4) 선택한 필터 적용
+rows = base
+if f == "검토 대상만":
+    rows = [n for n in base if n.get("status") != "부적합 제외"]
+elif f == "부적합 제외":
+    rows = [n for n in base if n.get("status") == "부적합 제외"]
+elif f == "참여 권장만":
+    rows = [n for n in base if (n.get("analysis") or {}).get("recommendation") == "참여 권장"]
 
 st.write(f"**{len(rows)}건**")
 st.divider()
