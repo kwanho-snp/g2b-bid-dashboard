@@ -1,5 +1,6 @@
 import streamlit as st
 from supabase import create_client
+from datetime import datetime
 
 SUPABASE_URL = st.secrets["SUPABASE_URL"]
 SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
@@ -87,6 +88,7 @@ if "id" in params:
             st.cache_data.clear()
     st.stop()
 
+# ===== 리스트 화면 =====
 st.title("📋 입찰공고 검토 보드")
 
 total = len(notices)
@@ -95,6 +97,8 @@ recommend = len([n for n in notices if (n.get("analysis") or {}).get("recommenda
 st.markdown(f"### 전체 {total}건  ·  검토 대상 {review}건  ·  참여 권장 {recommend}건")
 
 f = st.radio("필터", ["전체", "검토 대상만", "부적합 제외", "참여 권장만"], horizontal=True)
+show_expired = st.checkbox("마감 지난 공고도 보기", value=False)
+
 rows = notices
 if f == "검토 대상만":
     rows = [n for n in notices if n.get("status") != "부적합 제외"]
@@ -102,6 +106,19 @@ elif f == "부적합 제외":
     rows = [n for n in notices if n.get("status") == "부적합 제외"]
 elif f == "참여 권장만":
     rows = [n for n in notices if (n.get("analysis") or {}).get("recommendation") == "참여 권장"]
+
+# 마감 지난 공고 숨기기 (체크박스 켜면 포함)
+if not show_expired:
+    now = datetime.now()
+    def not_expired(n):
+        dl = n.get("deadline")
+        if not dl:
+            return True
+        try:
+            return datetime.fromisoformat(dl.replace("Z", "")) >= now
+        except Exception:
+            return True
+    rows = [n for n in rows if not_expired(n)]
 
 st.write(f"**{len(rows)}건**")
 st.divider()
