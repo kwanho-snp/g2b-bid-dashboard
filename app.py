@@ -109,13 +109,16 @@ elif f == "참여 권장만":
 
 # 마감 지난 공고 숨기기 (체크박스 켜면 포함)
 if not show_expired:
-    now = datetime.now()
+    from datetime import date
+    today = date.today()
     def not_expired(n):
         dl = n.get("deadline")
         if not dl:
             return True
         try:
-            return datetime.fromisoformat(dl.replace("Z", "")) >= now
+            # 앞 10글자(YYYY-MM-DD)만 떼서 날짜로 비교
+            d = date.fromisoformat(str(dl)[:10])
+            return d >= today
         except Exception:
             return True
     rows = [n for n in rows if not_expired(n)]
