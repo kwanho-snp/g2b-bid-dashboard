@@ -1,12 +1,16 @@
 import streamlit as st
 from supabase import create_client
-from datetime import datetime
+from datetime import datetime, timedelta, timezone, date
 
 SUPABASE_URL = st.secrets["SUPABASE_URL"]
 SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 st.set_page_config(page_title="입찰공고 검토 보드", layout="wide")
+
+# ===== 한국시간 (Streamlit Cloud 서버는 UTC라 보정 필수) =====
+def today_kst():
+    return (datetime.now(timezone.utc) + timedelta(hours=9)).date()
 
 @st.cache_data(ttl=30)
 def load_notices():
@@ -20,6 +24,9 @@ def load_attachments(notice_id):
 STATUS_OPTIONS = ["검토 대기", "검토중", "참여 결정", "미참여", "부적합 제외"]
 notices = load_notices()
 
+# ============================================================
+# 상세 화면
+# ============================================================
 params = st.query_params
 if "id" in params:
     nid = params["id"]
@@ -50,7 +57,7 @@ if "id" in params:
             st.write(ts.get("overview", ""))
             for t in ts.get("tasks", []):
                 if isinstance(t, dict):
-                    st.write("- " + t.get("title","") + ": " + t.get("detail",""))
+                    st.write("- " + t.get("title", "") + ": " + t.get("detail", ""))
                 else:
                     st.write("- " + str(t))
 
@@ -67,7 +74,7 @@ if "id" in params:
         if disq:
             st.subheader("자격 조건 판정")
             for d in disq:
-                icon = {"통과":"✅","탈락":"❌","판단불가":"❓"}.get(d.get("result"), "•")
+                icon = {"통과": "✅", "탈락": "❌", "판단불가": "❓"}.get(d.get("result"), "•")
                 st.write(f"{icon} **{d.get('rule')}** — {d.get('result')}")
                 if d.get("evidence"):
                     st.caption(f"근거: {d.get('evidence')}")
@@ -88,18 +95,19 @@ if "id" in params:
             st.cache_data.clear()
     st.stop()
 
-# ===== 리스트 화면 =====
+# ============================================================
+# 리스트 화면
+# ============================================================
 st.title("📋 입찰공고 검토 보드")
 
-# 1) 먼저 필터 UI
+# 1) 필터 UI
 f = st.radio("필터", ["전체", "검토 대상만", "부적합 제외", "참여 권장만"], horizontal=True)
 show_expired = st.checkbox("마감 지난 공고도 보기", value=False)
 
-# 2) 마감 지난 공고 숨기기 (요약·목록 모두 이 기준으로)
+# 2) 마감 지난 공고 숨기기 (요약·목록 공통 기준)
 base = notices
 if not show_expired:
-    from datetime import date
-    today = date.today()
+    today = today_kst()
     def not_expired(n):
         dl = n.get("deadline")
         if not dl:
@@ -110,10 +118,11 @@ if not show_expired:
             return True
     base = [n for n in notices if not_expired(n)]
 
-# 3) 요약 지표 (실제 보이는 base 기준 → 화면과 항상 일치)
+# 3) 요약 지표 (실제 보이는 기준과 항상 일치)
 total = len(base)
 review = len([n for n in base if n.get("status") != "부적합 제외"])
-recommend = len([n for n in base if (n.get("analysis") or {}).get("recommendation") == "참여 권장"])
+recommend = len([n for n in base
+                 if (n.get("analysis") or {}).get("recommendation") == "참여 권장"])
 st.markdown(f"### 전체 {total}건  ·  검토 대상 {review}건  ·  참여 권장 {recommend}건")
 
 # 4) 선택한 필터 적용
@@ -123,7 +132,8 @@ if f == "검토 대상만":
 elif f == "부적합 제외":
     rows = [n for n in base if n.get("status") == "부적합 제외"]
 elif f == "참여 권장만":
-    rows = [n for n in base if (n.get("analysis") or {}).get("recommendation") == "참여 권장"]
+    rows = [n for n in base
+            if (n.get("analysis") or {}).get("recommendation") == "참여 권장"]
 
 st.write(f"**{len(rows)}건**")
 st.divider()
