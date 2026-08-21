@@ -8,7 +8,6 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 st.set_page_config(page_title="입찰공고 검토 보드", layout="wide")
 
-# ===== 한국시간 (Streamlit Cloud 서버는 UTC라 보정 필수) =====
 def today_kst():
     return (datetime.now(timezone.utc) + timedelta(hours=9)).date()
 
@@ -49,6 +48,8 @@ if "id" in params:
             st.markdown(f"[🔗 나라장터에서 원문 보기]({notice['source_url']})")
 
         analysis = notice.get("analysis") or {}
+        if analysis.get("needs_check"):
+            st.warning("⚠️ 자격 조건 중 판단불가 항목이 있습니다. 원문을 직접 확인하세요.")
         st.info(f"**추천: {analysis.get('recommendation','-')}**")
 
         ts = notice.get("task_summary") or {}
@@ -100,11 +101,9 @@ if "id" in params:
 # ============================================================
 st.title("📋 입찰공고 검토 보드")
 
-# 1) 필터 UI
 f = st.radio("필터", ["전체", "검토 대상만", "부적합 제외", "참여 권장만"], horizontal=True)
 show_expired = st.checkbox("마감 지난 공고도 보기", value=False)
 
-# 2) 마감 지난 공고 숨기기 (요약·목록 공통 기준)
 base = notices
 if not show_expired:
     today = today_kst()
@@ -118,14 +117,12 @@ if not show_expired:
             return True
     base = [n for n in notices if not_expired(n)]
 
-# 3) 요약 지표 (실제 보이는 기준과 항상 일치)
 total = len(base)
 review = len([n for n in base if n.get("status") != "부적합 제외"])
 recommend = len([n for n in base
                  if (n.get("analysis") or {}).get("recommendation") == "참여 권장"])
 st.markdown(f"### 전체 {total}건  ·  검토 대상 {review}건  ·  참여 권장 {recommend}건")
 
-# 4) 선택한 필터 적용
 rows = base
 if f == "검토 대상만":
     rows = [n for n in base if n.get("status") != "부적합 제외"]
@@ -135,16 +132,33 @@ elif f == "참여 권장만":
     rows = [n for n in base
             if (n.get("analysis") or {}).get("recommendation") == "참여 권장"]
 
+# ===== 정렬 =====
+c1, c2 = st.columns([3, 1])
+sort_key = c1.radio("정렬 기준", ["게시일자", "입찰마감일", "검토점수"], horizontal=True)
+sort_desc = c2.radio("순서", ["내림차순", "오름차순"], horizontal=True) == "내림차순"
+
+FIELD = {"게시일자": "posted_at", "입찰마감일": "deadline", "검토점수": "quant_score"}
+field = FIELD[sort_key]
+
+def sort_value(n):
+    v = n.get(field)
+    if v is None:
+        return (1, 0 if field == "quant_score" else "")
+    return (0, v)
+
+rows = sorted(rows, key=sort_value, reverse=sort_desc)
+
 st.write(f"**{len(rows)}건**")
 st.divider()
 
 for n in rows:
     col1, col2, col3, col4, col5 = st.columns([4, 2, 1, 1, 1])
     url = n.get("source_url")
+    mark = " ⚠️" if (n.get("analysis") or {}).get("needs_check") else ""
     if url:
-        col1.markdown(f"**[{n['title']}]({url})**")
+        col1.markdown(f"**[{n['title']}]({url})**{mark}")
     else:
-        col1.markdown(f"**{n['title']}**")
+        col1.markdown(f"**{n['title']}**{mark}")
     col2.write(n.get("agency", "-"))
     col3.write(f"{n.get('quant_score','-')}점")
     col4.write((n.get("deadline") or "-")[:10])
