@@ -104,6 +104,7 @@ st.title("📋 입찰공고 검토 보드")
 f = st.radio("필터", ["전체", "검토 대상만", "부적합 제외", "참여 권장만"], horizontal=True)
 show_expired = st.checkbox("마감 지난 공고도 보기", value=False)
 
+# 마감 지난 공고 숨기기 (요약·목록 공통 기준)
 base = notices
 if not show_expired:
     today = today_kst()
@@ -117,12 +118,14 @@ if not show_expired:
             return True
     base = [n for n in notices if not_expired(n)]
 
+# 요약 지표 (실제 보이는 기준과 일치)
 total = len(base)
 review = len([n for n in base if n.get("status") != "부적합 제외"])
 recommend = len([n for n in base
                  if (n.get("analysis") or {}).get("recommendation") == "참여 권장"])
 st.markdown(f"### 전체 {total}건  ·  검토 대상 {review}건  ·  참여 권장 {recommend}건")
 
+# 필터 적용
 rows = base
 if f == "검토 대상만":
     rows = [n for n in base if n.get("status") != "부적합 제외"]
@@ -134,16 +137,18 @@ elif f == "참여 권장만":
 
 # ===== 정렬 =====
 c1, c2 = st.columns([3, 1])
-sort_key = c1.radio("정렬 기준", ["게시일자", "입찰마감일", "검토점수"], horizontal=True)
+sort_key = c1.radio("정렬 기준",
+                    ["게시일자", "입찰마감일", "검토점수", "사업예산"], horizontal=True)
 sort_desc = c2.radio("순서", ["내림차순", "오름차순"], horizontal=True) == "내림차순"
 
-FIELD = {"게시일자": "posted_at", "입찰마감일": "deadline", "검토점수": "quant_score"}
+FIELD = {"게시일자": "posted_at", "입찰마감일": "deadline",
+         "검토점수": "quant_score", "사업예산": "budget"}
 field = FIELD[sort_key]
 
 def sort_value(n):
     v = n.get(field)
     if v is None:
-        return (1, 0 if field == "quant_score" else "")
+        return (1, 0 if field in ("quant_score", "budget") else "")
     return (0, v)
 
 rows = sorted(rows, key=sort_value, reverse=sort_desc)
@@ -152,17 +157,29 @@ st.write(f"**{len(rows)}건**")
 st.divider()
 
 for n in rows:
-    col1, col2, col3, col4, col5 = st.columns([4, 2, 1, 1, 1])
+    col1, col2, col3, col4, col5, col6 = st.columns([4, 2, 1.3, 1, 1, 1])
+
     url = n.get("source_url")
     mark = " ⚠️" if (n.get("analysis") or {}).get("needs_check") else ""
     if url:
         col1.markdown(f"**[{n['title']}]({url})**{mark}")
     else:
         col1.markdown(f"**{n['title']}**{mark}")
+
     col2.write(n.get("agency", "-"))
-    col3.write(f"{n.get('quant_score','-')}점")
-    col4.write((n.get("deadline") or "-")[:10])
-    col5.write(n.get("status", "-"))
+
+    # 사업예산 (1억 이상은 '억', 미만은 '만' 단위로 축약)
+    b = n.get("budget")
+    if b:
+        b = int(b)
+        col3.write(f"{b/100000000:.1f}억" if b >= 100000000 else f"{b//10000:,}만")
+    else:
+        col3.write("-")
+
+    col4.write(f"{n.get('quant_score','-')}점")
+    col5.write((n.get("deadline") or "-")[:10])
+    col6.write(n.get("status", "-"))
+
     if col1.button("상세보기", key=n["id"]):
         st.query_params["id"] = n["id"]
         st.rerun()
