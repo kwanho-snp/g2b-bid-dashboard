@@ -216,9 +216,7 @@ for n in rows:
         col1.markdown(f"**{n['title']}**{mark}")
 
     # 상세보기: 버튼 대신 링크 → Ctrl(Cmd)+클릭으로 새 탭 열기 가능
-    qs = (f"?id={n['id']}&f={f}&s={sort_key}"
-          f"&d={'desc' if sort_desc else 'asc'}&exp={'1' if show_expired else '0'}")
-    col1.markdown(f"[▶ 분석 보기]({qs})")
+    col1.markdown(f"[▶ 분석 보기](?id={n['id']})")
 
     col2.write(n.get("agency", "-"))
 
