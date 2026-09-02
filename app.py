@@ -41,9 +41,8 @@ def latest_only(rows):
     best = {}
     for n in rows:
         key = n.get("bid_notice_no")
-        ord_no = str(n.get("bid_notice_ord") or "0")
         try:
-            ord_val = int(ord_no)
+            ord_val = int(str(n.get("bid_notice_ord") or "0"))
         except ValueError:
             ord_val = 0
         if key not in best or ord_val > best[key][0]:
@@ -71,7 +70,6 @@ if "id" in params:
     nid = params["id"]
     notice = next((n for n in notices if n["id"] == nid), None)
     if notice:
-        # 목록으로 돌아갈 때 필터·정렬 상태 유지 (id만 제거)
         if st.button("← 목록으로"):
             del st.query_params["id"]
             st.rerun()
@@ -142,7 +140,6 @@ if "id" in params:
 # ============================================================
 st.title("📋 입찰공고 검토 보드")
 
-# --- 필터·정렬 상태를 URL에 보관 (상세 다녀와도 유지) ---
 qp = st.query_params
 FILTERS = ["전체", "검토 대상만", "부적합 제외", "참여 권장만"]
 SORTS = ["게시일자", "입찰마감일", "검토점수", "사업예산"]
@@ -187,7 +184,7 @@ sort_key = c1.radio("정렬 기준", SORTS, horizontal=True,
 sort_desc = c2.radio("순서", ["내림차순", "오름차순"], horizontal=True,
                      index=1 if qp.get("d") == "asc" else 0) == "내림차순"
 
-# 현재 선택을 URL에 저장 → 상세 다녀와도 복원됨
+# 현재 선택을 URL에 저장 (상세 다녀와도 복원)
 st.query_params["f"] = f
 st.query_params["s"] = sort_key
 st.query_params["d"] = "desc" if sort_desc else "asc"
@@ -218,6 +215,11 @@ for n in rows:
     else:
         col1.markdown(f"**{n['title']}**{mark}")
 
+    # 상세보기: 버튼 대신 링크 → Ctrl(Cmd)+클릭으로 새 탭 열기 가능
+    qs = (f"?id={n['id']}&f={f}&s={sort_key}"
+          f"&d={'desc' if sort_desc else 'asc'}&exp={'1' if show_expired else '0'}")
+    col1.markdown(f"[▶ 분석 보기]({qs})")
+
     col2.write(n.get("agency", "-"))
 
     b = n.get("budget")
@@ -242,7 +244,4 @@ for n in rows:
         st.cache_data.clear()
         st.rerun()
 
-    # 현재 필터·정렬을 유지한 채 상세로 이동하는 링크 (Ctrl+클릭 → 새 탭)
-    qs = f"?id={n['id']}&f={f}&s={sort_key}&d={'desc' if sort_desc else 'asc'}&exp={'1' if show_expired else '0'}"
-    col1.markdown(f"[상세보기]({qs})")
     st.divider()
