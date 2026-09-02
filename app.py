@@ -242,7 +242,7 @@ for n in rows:
         st.cache_data.clear()
         st.rerun()
 
-    if col1.button("상세보기", key=n["id"]):
-        st.query_params["id"] = n["id"]
-        st.rerun()
+    # 현재 필터·정렬을 유지한 채 상세로 이동하는 링크 (Ctrl+클릭 → 새 탭)
+    qs = f"?id={n['id']}&f={f}&s={sort_key}&d={'desc' if sort_desc else 'asc'}&exp={'1' if show_expired else '0'}"
+    col1.markdown(f"[상세보기]({qs})")
     st.divider()
