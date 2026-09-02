@@ -23,6 +23,7 @@ COMPANY_INFO = {
 }
 
 STATUS_OPTIONS = ["검토 대기", "검토중", "참여 결정", "미참여", "부적합 제외"]
+EXCLUDED = {"부적합 제외", "미참여"}   # 검토 대상에서 빠지는 상태들
 
 def today_kst():
     return (datetime.now(timezone.utc) + timedelta(hours=9)).date()
@@ -145,7 +146,7 @@ if "id" in params:
 st.title("📋 입찰공고 검토 보드")
 
 qp = st.query_params
-FILTERS = ["전체", "검토 대상만", "부적합 제외", "참여 권장만"]
+FILTERS = ["전체", "검토 대상만", "제외 (부적합·미참여)", "참여 권장만"]
 SORTS = ["게시일자", "입찰마감일", "검토점수", "사업예산"]
 
 f = st.radio("필터", FILTERS, horizontal=True,
@@ -166,22 +167,21 @@ if not show_expired:
     base = [n for n in notices if not_expired(n)]
 
 total = len(base)
-review = len([n for n in base if n.get("status") != "부적합 제외"])
+review = len([n for n in base if n.get("status") not in EXCLUDED])
 recommend = len([n for n in base
                  if (n.get("analysis") or {}).get("recommendation") == "참여 권장"
-                 and n.get("status") != "부적합 제외"])
+                 and n.get("status") not in EXCLUDED])
 st.markdown(f"### 전체 {total}건  ·  검토 대상 {review}건  ·  참여 권장 {recommend}건")
 
 rows = base
 if f == "검토 대상만":
-    rows = [n for n in base if n.get("status") != "부적합 제외"]
-elif f == "부적합 제외":
-    rows = [n for n in base if n.get("status") == "부적합 제외"]
+    rows = [n for n in base if n.get("status") not in EXCLUDED]
+elif f == "제외 (부적합·미참여)":
+    rows = [n for n in base if n.get("status") in EXCLUDED]
 elif f == "참여 권장만":
-    # 부적합 제외로 바꾼 건은 이 목록에서도 빠지도록 (카테고리 일관성)
     rows = [n for n in base
             if (n.get("analysis") or {}).get("recommendation") == "참여 권장"
-            and n.get("status") != "부적합 제외"]
+            and n.get("status") not in EXCLUDED]
 
 # --- 정렬 ---
 c1, c2 = st.columns([3, 1])
