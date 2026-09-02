@@ -51,7 +51,11 @@ def latest_only(rows):
 
 notices = latest_only(load_notices())
 
-# ===== 사이드바: 현재 검색 조건 & 회사 자격 =====
+# 상태 변경 직후 안내 메시지
+if "moved_msg" in st.session_state:
+    st.success(st.session_state.pop("moved_msg"))
+
+# ===== 사이드바 =====
 with st.sidebar:
     st.subheader("🔍 검색 키워드")
     st.write(" · ".join(KEYWORDS))
@@ -148,7 +152,6 @@ f = st.radio("필터", FILTERS, horizontal=True,
              index=FILTERS.index(qp.get("f")) if qp.get("f") in FILTERS else 0)
 show_expired = st.checkbox("마감 지난 공고도 보기", value=(qp.get("exp") == "1"))
 
-# 마감 지난 공고 숨기기
 base = notices
 if not show_expired:
     today = today_kst()
@@ -165,7 +168,8 @@ if not show_expired:
 total = len(base)
 review = len([n for n in base if n.get("status") != "부적합 제외"])
 recommend = len([n for n in base
-                 if (n.get("analysis") or {}).get("recommendation") == "참여 권장"])
+                 if (n.get("analysis") or {}).get("recommendation") == "참여 권장"
+                 and n.get("status") != "부적합 제외"])
 st.markdown(f"### 전체 {total}건  ·  검토 대상 {review}건  ·  참여 권장 {recommend}건")
 
 rows = base
@@ -174,8 +178,10 @@ if f == "검토 대상만":
 elif f == "부적합 제외":
     rows = [n for n in base if n.get("status") == "부적합 제외"]
 elif f == "참여 권장만":
+    # 부적합 제외로 바꾼 건은 이 목록에서도 빠지도록 (카테고리 일관성)
     rows = [n for n in base
-            if (n.get("analysis") or {}).get("recommendation") == "참여 권장"]
+            if (n.get("analysis") or {}).get("recommendation") == "참여 권장"
+            and n.get("status") != "부적합 제외"]
 
 # --- 정렬 ---
 c1, c2 = st.columns([3, 1])
@@ -184,7 +190,6 @@ sort_key = c1.radio("정렬 기준", SORTS, horizontal=True,
 sort_desc = c2.radio("순서", ["내림차순", "오름차순"], horizontal=True,
                      index=1 if qp.get("d") == "asc" else 0) == "내림차순"
 
-# 현재 선택을 URL에 저장 (상세 다녀와도 복원)
 st.query_params["f"] = f
 st.query_params["s"] = sort_key
 st.query_params["d"] = "desc" if sort_desc else "asc"
@@ -215,7 +220,6 @@ for n in rows:
     else:
         col1.markdown(f"**{n['title']}**{mark}")
 
-    # 상세보기: 버튼 대신 링크 → Ctrl(Cmd)+클릭으로 새 탭 열기 가능
     col1.markdown(f"[▶ 분석 보기](?id={n['id']})")
 
     col2.write(n.get("agency", "-"))
@@ -230,7 +234,6 @@ for n in rows:
     col4.write(f"{n.get('quant_score','-')}점")
     col5.write((n.get("deadline") or "-")[:10])
 
-    # 메인에서 바로 상태 변경
     cur = n.get("status", "검토 대기")
     new = col6.selectbox(
         "상태", STATUS_OPTIONS,
@@ -239,6 +242,7 @@ for n in rows:
     )
     if new != cur:
         supabase.table("notices").update({"status": new}).eq("id", n["id"]).execute()
+        st.session_state["moved_msg"] = f"'{n['title'][:30]}' → '{new}'(으)로 이동했습니다."
         st.cache_data.clear()
         st.rerun()
 
